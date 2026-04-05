@@ -123,7 +123,7 @@ public class FacultyModule extends JFrame {
 
         JLabel rollLbl = new JLabel("Roll No:");
         UIUtils.styleLabel(rollLbl);
-        JLabel marksLbl = new JLabel("Marks (0-100):");
+        JLabel marksLbl = new JLabel("Marks:");
         UIUtils.styleLabel(marksLbl);
 
         JTextField rollInput = new JTextField(12);
@@ -132,6 +132,7 @@ public class FacultyModule extends JFrame {
         UIUtils.styleTextField(marksInput);
         rollInput.setPreferredSize(new Dimension(140, 32));
         marksInput.setPreferredSize(new Dimension(100, 32));
+        marksInput.setToolTipText("Enter 0-100, 'AB' for Absent, or 'MP' for Malpractice");
 
         JButton saveBtn = new JButton("Save Marks");
         UIUtils.styleButton(saveBtn);
@@ -182,21 +183,6 @@ public class FacultyModule extends JFrame {
             ex.printStackTrace();
         }
 
-        // Fallback: load all semesters if none assigned
-        if (assignedSems.isEmpty()) {
-            try (Connection c = DatabaseConnection.getConnection();
-                    Statement st = c.createStatement();
-                    ResultSet rs = st.executeQuery("SELECT DISTINCT semester FROM subjects ORDER BY semester")) {
-                while (rs.next()) {
-                    int sem = rs.getInt("semester");
-                    semCombo.addItem("Semester " + sem);
-                    assignedSems.add(sem);
-                }
-            } catch (SQLException ex) {
-                ex.printStackTrace();
-            }
-        }
-
         Runnable loadSubjects = () -> {
             subjectCombo.removeAllItems();
             currentSubjects.clear();
@@ -236,12 +222,27 @@ public class FacultyModule extends JFrame {
                 p.setInt(2, selectedSemester);
                 ResultSet rs = p.executeQuery();
                 while (rs.next()) {
-                    Object marks = rs.getObject("marks");
-                    String status = marks == null ? "Not Entered"
-                            : (((Number) marks).doubleValue() >= 35 ? "Pass" : "Fail");
+                    Object marksObj = rs.getObject("marks");
+                    String displayMarks = "";
+                    String status = "Not Entered";
+                    
+                    if (marksObj != null) {
+                        double marksVal = ((Number) marksObj).doubleValue();
+                        if (marksVal == -1) {
+                            displayMarks = "AB";
+                            status = "Fail";
+                        } else if (marksVal == -2) {
+                            displayMarks = "MP";
+                            status = "Fail";
+                        } else {
+                            displayMarks = String.valueOf(marksVal);
+                            status = marksVal >= 35 ? "Pass" : "Fail";
+                        }
+                    }
+                    
                     tableModel.addRow(new Object[] {
                             rs.getString("roll_no"), rs.getString("name"),
-                            marks == null ? "" : marks, status });
+                            displayMarks, status });
                 }
             } catch (SQLException ex) {
                 ex.printStackTrace();
@@ -277,9 +278,17 @@ public class FacultyModule extends JFrame {
                 return;
             }
             try {
-                double marks = Double.parseDouble(marksStr);
-                if (marks < 0 || marks > 100)
-                    throw new NumberFormatException();
+                double marks = 0;
+                if (marksStr.equalsIgnoreCase("AB") || marksStr.equalsIgnoreCase("Absent")) {
+                    marks = -1;
+                } else if (marksStr.equalsIgnoreCase("MP") || marksStr.equalsIgnoreCase("Malpractice")) {
+                    marks = -2;
+                } else {
+                    marks = Double.parseDouble(marksStr);
+                    if (marks < 0 || marks > 100)
+                        throw new NumberFormatException();
+                }
+
                 try (Connection c = DatabaseConnection.getConnection()) {
                     boolean exists;
                     try (PreparedStatement p = c.prepareStatement(
@@ -306,7 +315,7 @@ public class FacultyModule extends JFrame {
                 }
             } catch (NumberFormatException ex) {
                 JOptionPane.showMessageDialog(panel,
-                        "Marks must be a number between 0 and 100.", "Validation",
+                        "Marks must be a number between 0 and 100, 'AB' for Absent, or 'MP' for Malpractice.", "Validation",
                         JOptionPane.WARNING_MESSAGE);
             } catch (SQLException ex) {
                 JOptionPane.showMessageDialog(panel,
@@ -315,8 +324,6 @@ public class FacultyModule extends JFrame {
         });
         marksInput.addActionListener(e -> saveBtn.doClick());
 
-        // Register listeners AFTER initial population to avoid premature firing during
-        // addItem()
         semCombo.addActionListener(e -> {
             loadSubjects.run();
             loadStudents.run();

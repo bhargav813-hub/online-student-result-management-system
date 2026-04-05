@@ -1,5 +1,4 @@
 -- Oracle Database Schema
--- Run this script as the 'system' user or another user with sufficient privileges.
 
 -- Create admin table
 CREATE TABLE admin (
