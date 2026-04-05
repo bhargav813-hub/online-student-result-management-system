@@ -26,6 +26,7 @@ StudentResultSystem/
 └── README.md                      # Project documentation
 
 
+
 🌟 Key Features
 
 The system is divided into three main modules:
